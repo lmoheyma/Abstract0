@@ -69,7 +69,7 @@ const BackendStatus = () => {
             className={`h-2 w-2 fill-current ${config.color} ${config.pulse ? "animate-pulse" : ""}`}
           />
           <span className="text-xs text-muted-foreground hidden sm:inline">
-            {status === "connected" ? "API" : status === "checking" ? "..." : "Offline"}
+            {status === "connected" ? "Code Agent" : status === "checking" ? "..." : "Offline"}
           </span>
         </button>
       </TooltipTrigger>

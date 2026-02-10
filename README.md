@@ -2,11 +2,16 @@ Abstract0
 ===========
 
 LLM-driven code sandbox: FastAPI backend that proxies OpenRouter and a Vite + React frontend that streams files into Sandpack.
+This app generates React/Vite websites using AI; current model: Devstral 2 2512.
 
 Architecture
 ------------
 - Backend: FastAPI proxy with JSON-only model responses.
 - Frontend: Vite + React UI with Sandpack workspace orchestration.
+
+Interface Example
+-----------------
+![Abstract0 interface example](frontend/public/ui-example.png)
 
 API
 ---
