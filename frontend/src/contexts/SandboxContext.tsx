@@ -18,6 +18,7 @@ interface SandboxContextType {
   isReady: boolean;
   generate: (prompt: string, context: Message[]) => Promise<void>;
   fileStreaming: FileStreamingState;
+  restoreFileStreaming: (files: Record<string, string>) => void;
 }
 
 const SandboxContext = createContext<SandboxContextType | null>(null);
@@ -35,7 +36,7 @@ export function SandboxProvider({ children, projectsState }: SandboxProviderProp
   const [error, setError] = useState<string | null>(null);
   const [aiMessage, setAiMessage] = useState<string | null>(null);
 
-  const { state: fileStreaming, startStreaming } = useFileStreaming();
+  const { state: fileStreaming, startStreaming, restore: restoreFileStreaming, reset: resetFileStreaming } = useFileStreaming();
 
   const generate = useCallback(async (prompt: string, context: Message[]) => {
     setError(null);
@@ -84,7 +85,8 @@ export function SandboxProvider({ children, projectsState }: SandboxProviderProp
     setFiles({});
     setError(null);
     setAiMessage(null);
-  }, [currentProjectId]);
+    resetFileStreaming();
+  }, [currentProjectId, resetFileStreaming]);
 
   return (
     <SandboxContext.Provider
@@ -97,6 +99,7 @@ export function SandboxProvider({ children, projectsState }: SandboxProviderProp
         isReady: true,
         generate,
         fileStreaming,
+        restoreFileStreaming,
       }}
     >
       {children}

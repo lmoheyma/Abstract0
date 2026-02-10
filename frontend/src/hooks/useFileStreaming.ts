@@ -17,6 +17,7 @@ export interface FileStreamingState {
 interface UseFileStreamingResult {
   state: FileStreamingState;
   startStreaming: (files: Record<string, string>) => Promise<void>;
+  restore: (files: Record<string, string>) => void;
   reset: () => void;
 }
 
@@ -40,6 +41,26 @@ export function useFileStreaming(): UseFileStreamingResult {
       isStreaming: false,
       currentFile: null,
       changes: [],
+    });
+  }, [clearTimeouts]);
+
+  const restore = useCallback((files: Record<string, string>) => {
+    clearTimeouts();
+    
+    const countLines = (content: string) => content.split('\n').length;
+    
+    const changes: FileChange[] = Object.entries(files).map(([path, content]) => ({
+      path,
+      status: "complete",
+      oldLines: 0,
+      newLines: countLines(content),
+      progress: 100,
+    }));
+
+    setState({
+      isStreaming: false,
+      currentFile: null,
+      changes,
     });
   }, [clearTimeouts]);
 
@@ -132,6 +153,7 @@ export function useFileStreaming(): UseFileStreamingResult {
   return {
     state,
     startStreaming,
+    restore,
     reset,
   };
 }

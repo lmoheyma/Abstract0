@@ -22,14 +22,17 @@ const ChatPanel = ({
     aiMessage,
     generate,
     isReady,
-    fileStreaming
+    fileStreaming,
+    files: generatedFiles,
+    restoreFileStreaming
   } = useSandbox();
   const [message, setMessage] = useState("");
   const {
     messages,
     setMessages,
     addMessage,
-    updateMessage
+    updateMessage,
+    isLoading
   } = useChatMessages(projectId);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -46,16 +49,32 @@ const ChatPanel = ({
         id: Date.now(),
         type: "ai",
         content: aiMessage,
-        isStreaming: true
+        isStreaming: true,
+        files: generatedFiles
       }];
     });
-  }, [aiMessage, setMessages]);
+  }, [aiMessage, generatedFiles, setMessages]);
 
   const handleStreamingComplete = useCallback((messageId: number) => {
     updateMessage(messageId, {
       isStreaming: false
     });
   }, [updateMessage]);
+  
+  // Restore file streaming state when messages are loaded
+  useEffect(() => {
+    if (isLoading || messages.length === 0) return;
+    
+    // Find the last AI message with files
+    const lastAiMessageWithFiles = [...messages]
+      .reverse()
+      .find(msg => msg.type === "ai" && msg.files && Object.keys(msg.files).length > 0);
+    
+    if (lastAiMessageWithFiles && lastAiMessageWithFiles.files) {
+      restoreFileStreaming(lastAiMessageWithFiles.files);
+    }
+  }, [isLoading, messages, restoreFileStreaming]);
+  
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
