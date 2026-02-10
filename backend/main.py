@@ -1,13 +1,18 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import httpx
 import os
 import json
 import re
+import logging
 from dotenv import load_dotenv
+from mistralai import Mistral
+from starlette.concurrency import run_in_threadpool
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
 
@@ -30,7 +35,8 @@ class GenerateResponse(BaseModel):
     files: dict[str, str]
     message: str
 
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
+MISTRAL_AGENT_ID = os.getenv("MISTRAL_AGENT_ID")
 
 @app.get("/health")
 async def health_check():
@@ -39,56 +45,65 @@ async def health_check():
 
 @app.post("/generate", response_model=GenerateResponse)
 async def generate_code(request: GenerateRequest):
-    if not OPENROUTER_API_KEY:
-        raise HTTPException(500, "OPENROUTER_API_KEY not configured")
+    if not MISTRAL_API_KEY:
+        raise HTTPException(500, "MISTRAL_API_KEY not configured")
+    if not MISTRAL_AGENT_ID:
+        raise HTTPException(500, "MISTRAL_AGENT_ID not configured")
 
-    messages = [{"role": m.role, "content": m.content} for m in request.context]
-    messages.append({"role": "user", "content": request.prompt})
+    inputs = [
+        {"role": m.role, "content": m.content}
+        for m in request.context
+        if m.role in {"user", "assistant"}
+    ]
+    inputs.append({"role": "user", "content": request.prompt})
 
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "mistralai/devstral-2512",
-                "messages": [
-                    {"role": "system", "content": "You generate React/Vite code. Reply only in JSON with the shape: {\"files\": {\"path\": \"content\"}, \"message\": \"summary\"}"},
-                    *messages
-                ],
-            },
-            timeout=60.0
+    client = Mistral(api_key=MISTRAL_API_KEY)
+    try:
+        response = await run_in_threadpool(
+            client.beta.conversations.start,
+            agent_id=MISTRAL_AGENT_ID,
+            inputs=inputs,
         )
+    except Exception as e:
+        logger.exception("Mistral API error")
+        raise HTTPException(500, f"Mistral API error : {str(e)}")
+
+    # Extract content from Mistral conversation response
+    if not response.outputs or len(response.outputs) == 0:
+        raise HTTPException(500, "Empty response from Mistral API")
     
-    if response.status_code != 200:
-        print(f"OpenRouter API error: {response.status_code} - {response.text}")
-        raise HTTPException(500, f"OpenRouter API error: {response.status_code}")
-    
-    data = response.json()
-    
-    if "choices" not in data or not data["choices"]:
-        print(f"Invalid API response structure: {data}")
-        raise HTTPException(500, "Invalid API response structure")
-    content = data["choices"][0]["message"]["content"]
+    content = response.outputs[0].content
     
     if not content or not content.strip():
         raise HTTPException(500, "Empty response from model")
     
     content = content.strip()
-    if content.startswith("```"):
-        match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', content, re.DOTALL)
-        if match:
-            content = match.group(1).strip()
+    
+    # Extract JSON from markdown code fences if present
+    json_match = re.search(r'```(?:json)?\s*\n(.*?)\n```', content, re.DOTALL)
+    if json_match:
+        content = json_match.group(1).strip()
+    
+    # If content doesn't look like JSON, treat as conversational response
+    if not content.startswith('{'):
+        logger.info("Agent returned conversational text instead of JSON")
+        return GenerateResponse(files={}, message=content)
     
     try:
         result = json.loads(content)
     except json.JSONDecodeError as e:
-        print(f"JSON decode error: {e}")
-        print(f"Content that failed to parse: {content}")
+        logger.error("JSON decode error: %s", e)
         raise HTTPException(500, f"Invalid model response JSON: {str(e)}")
     
+    if isinstance(result, dict) and "files" in result and isinstance(result["files"], dict):
+        for key in list(result.keys()):
+            if key in {"files", "message"}:
+                continue
+            value = result[key]
+            if isinstance(value, str):
+                result["files"][key] = value
+                del result[key]
+
     if "files" not in result or "message" not in result:
         raise HTTPException(500, "Invalid response format (missing 'files' or 'message')")
     

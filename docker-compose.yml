@@ -7,10 +7,12 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - MISTRAL_AGENT_ID=${MISTRAL_AGENT_ID}
     volumes:
       - ./backend:/app
       - /app/__pycache__
+      - /app/.venv
     networks:
       - abstract0-network
     restart: unless-stopped

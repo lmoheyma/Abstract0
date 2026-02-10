@@ -3,6 +3,8 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+ENV UV_LINK_MODE=copy
+
 # Installer les dépendances système
 RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
