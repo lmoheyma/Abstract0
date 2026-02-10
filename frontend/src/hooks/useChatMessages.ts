@@ -1,0 +1,94 @@
+import { useState, useEffect, useCallback, useRef } from "react";
+import { 
+  loadMessagesFromDB, 
+  saveMessagesToDB, 
+  deleteMessagesFromDB,
+  migrateFromLocalStorage 
+} from "@/services/indexedDB";
+
+export interface ChatMessage {
+  id: number;
+  type: "user" | "ai";
+  content: string;
+  isStreaming?: boolean;
+}
+
+export function useChatMessages(projectId: string | null) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSavedRef = useRef<string>("");
+
+  useEffect(() => {
+    const init = async () => {
+      await migrateFromLocalStorage();
+      
+      if (projectId) {
+        setIsLoading(true);
+        const loaded = await loadMessagesFromDB(projectId);
+        setMessages(loaded);
+        lastSavedRef.current = JSON.stringify(loaded);
+        setIsLoading(false);
+      } else {
+        setMessages([]);
+        setIsLoading(false);
+      }
+    };
+    
+    init();
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!projectId || isLoading) return;
+    
+    const messagesJson = JSON.stringify(messages);
+    
+    if (messagesJson === lastSavedRef.current) return;
+    
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    
+    saveTimeoutRef.current = setTimeout(async () => {
+      await saveMessagesToDB(projectId, messages);
+      lastSavedRef.current = messagesJson;
+    }, 500);
+    
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, [projectId, messages, isLoading]);
+
+  const addMessage = useCallback((message: ChatMessage) => {
+    setMessages(prev => [...prev, message]);
+  }, []);
+
+  const updateMessage = useCallback((id: number, updates: Partial<ChatMessage>) => {
+    setMessages(prev => prev.map(msg => 
+      msg.id === id ? { ...msg, ...updates } : msg
+    ));
+  }, []);
+
+  const clearMessages = useCallback(async () => {
+    setMessages([]);
+    if (projectId) {
+      await deleteMessagesFromDB(projectId);
+      lastSavedRef.current = "[]";
+    }
+  }, [projectId]);
+
+  return {
+    messages,
+    setMessages,
+    addMessage,
+    updateMessage,
+    clearMessages,
+    isLoading,
+  };
+}
+
+export async function deleteProjectMessages(projectId: string): Promise<void> {
+  await deleteMessagesFromDB(projectId);
+}
