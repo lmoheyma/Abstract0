@@ -330,7 +330,7 @@ const CodeEditor = () => {
           <Highlight
             theme={darkTheme}
             code={currentCode}
-            language={currentLanguage as any}
+            language={currentLanguage}
           >
             {({ className, style, tokens, getLineProps, getTokenProps }) => (
               <pre 
