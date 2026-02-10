@@ -44,10 +44,9 @@ const StreamingMessage = ({ content, onComplete }: StreamingMessageProps) => {
           )}
         </div>
         <div className="text-sm leading-relaxed text-foreground/90 prose prose-sm prose-invert max-w-none">
-          <ReactMarkdown>{displayedText}</ReactMarkdown>
-          {isStreaming && (
-            <span className="inline-block w-0.5 h-[14px] bg-primary ml-0.5 animate-pulse rounded-full" />
-          )}
+          <ReactMarkdown>
+            {isStreaming ? `${displayedText}▎` : displayedText}
+          </ReactMarkdown>
         </div>
       </div>
     </div>
